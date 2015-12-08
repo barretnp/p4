@@ -1,0 +1,4 @@
+This project was completed in compliance with the JMU Honor Code. We did not receive any unauthorized help with this project. Nick: factory_line.c manufacturing.c. Paul: supervisor.c manufacturing.c.
+
+NB
+PE
