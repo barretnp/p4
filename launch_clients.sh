@@ -3,7 +3,7 @@
 
 HOSTS="l25008"
 USERNAME=$1
-SCRIPT="cd ~/FA15/CS361/phase4; ./client"
+SCRIPT="cd ~/FA15/CS361/phase4/p4; ./client"
 
 if [ -n "$USERNAME" ]
 then
