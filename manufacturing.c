@@ -10,6 +10,8 @@
 #include "shared.h"
 
 #define CLIENTS 1
+#define WORKING 1
+#define NO_MORE 0
 
 state_t manufacturing = {
    default_event_handler, 
@@ -56,84 +58,131 @@ void charge_client()
 
 void dispatch_factory_lines()
 {
-   int i;
-   int counter = 0;
-   int udpSocket, nBytes;
+   int counter, i, udpSocket, nBytes, curr_statusi, front, next;
 
-   int return_status;
+   int queue[5];
 
-   uint32_t order_size, order_size2;
-
-   line_response response;
+   uint32_t order_size, return_status;
 
    line_stats *stats[5];
 
    order_struct *orders[5];
 
-   int ip_list[5];
+   status_struct status;
 
-   ip_list[0] = 0x867e8d5e;
-   /*ip_list[1] = 0x867e8d9b;
-   ip_list[2] = 0x867e8d9c;
-   ip_list[3] = 0x867e8d9d;
-   ip_list[4] = 0x867e8d9e;
+   struct sockaddr_in serverAddr, clientAddr;
+   
+   socklen_t addr_size, client_addr_size;
+   
+   client_addr_size = sizeof(clientAddr);
 
    printf("Factory starting up...\n");
 
-   stats = malloc(sizeof(line_stats) * 5);*/
+   //Allocate array of structs for order info
    for(i = 0; i < CLIENTS; i++)
    {
       orders[i] = malloc(sizeof(order_struct));
+      stats[i] = malloc(sizeof(line_stats));
    }
 
    //Seed random number generator
    srandom(time(NULL));
 
+ 
+   //Generate oder size
    order_size = random() % 40001 + 10000;
 
+   //Create capacity, duration, and id numbers for orders
    for(i = 0; i < CLIENTS; i++)
    {
-      orders[i]->capacity = random() % 41 + 10;
+      orders[i]->capacity = random() % 591 + 10;
       orders[i]->duration = random() % 4001 + 1000;
       orders[i]->id_num = i + 1; 
+      printf("Capacity: %d\n", orders[i]->capacity);
+      printf("Duration: %d\n", orders[i]->duration);
+      printf("id_num: %d\n", orders[i]->id_num);
    }
 
-   struct sockaddr_in serverAddr, clientAddr;
-   struct sockaddr_storage serverStorage;
-   socklen_t addr_size, clinet_addr_size;
-   int clientlen_t = sizeof(clientAddr);
-
+   //Set up Socket
    udpSocket = socket(PF_INET, SOCK_DGRAM, 0);
-   
+ 
+   if(udpSocket < 0)
+   {
+      printf("Failed to create file descriptor\n");
+      exit(0);
+   }
+
+   //Create port and IP info for socket
+   memset((char *)&serverAddr, 0, sizeof(serverAddr));
    serverAddr.sin_family = AF_INET;
    serverAddr.sin_port = htons(7891);
-   serverAddr.sin_addr.s_addr = inet_addr("134.126.141.94");
-   memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
+   serverAddr.sin_addr.s_addr = inet_addr("134.126.141.154");
 
-   bind(udpSocket, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
+   //Bind socket to port
+   if((bind(udpSocket, (struct sockaddr *) &serverAddr, sizeof(serverAddr))) < 0)
+   {
+      printf("Failed to bind port\n");
+      exit(0);
+   }
+
+   counter = CLIENTS;
+   curr_status = WORKING;
+   i = 0;
+   printf("%d\n", order_size);
+   //Receive message from new client and send order info
+   while(order_size > 0)
+   {
+      printf("top of loop\n");
+      recvfrom(udpSocket, &return_status, sizeof(return_status), 0, (struct sockaddr *) &clientAddr, &client_addr_size);
+      printf("Received: message: %d\n", return_status);
+      if(return_status == 6 && curr_status == WORKING)
+      {
+         sendto(udpSocket, orders[i], sizeof(order_struct), 0, (struct sockaddr *)&clientAddr, client_addr_size);
+         i++;
+         printf("Sent message back to client\n");
+      }
+      else if(curr_status == WORKING)
+      {
+        printf("Made into working section\n");
+        if(orders[return_status-1]->capacity <= order_size)
+        {
+           
+           status.status = curr_status;
+           status.work = orders[return_status-1]->capacity; 
+           sendto(udpSocket, &status, sizeof(status_struct), 0, (struct sockaddr *)&clientAddr, client_addr_size);
+           stats[return_status-1]->num_completed += status.work;
+           stats[return_status-1]->iterations++;
+           order_size -= status.work;
+           printf("full order\n");
+        }
+        else
+        {
+           status.status = curr_status;
+           status.work = order_size;
+           sendto(udpSocket, &status, sizeof(status), 0, (struct sockaddr *)&clientAddr, client_addr_size);
+           status.status = NO_MORE;
+           stats[return_status-1]->num_completed += status.work;
+           stats[return_status-1]->iterations++; 
+           order_size -= status.work;
+           printf("partial order\n");
+           recvfrom(udpSocket, &return_status, sizeof(return_status), 0, (struct sockaddr *) &clientAddr, &client_addr_size);
+           sendto(udpSocket, &status, sizeof(status), 0, (struct sockaddr *)&clientAddr, client_addr_size);
+           printf("finished in server\n");
+        } 
+      }
+   }
 
    for(i = 0; i < CLIENTS; i++)
    {
-      clientAddr.sin_family = AF_INET;
-      clientAddr.sin_port = htons(7892);
-      clientAddr.sin_addr.s_addr = inet_addr("134.126.141.20");
-      memset(clientAddr.sin_zero, '\0', sizeof clientAddr.sin_zero); 
-      sendto(udpSocket, orders[i], sizeof(orders[i]), 0, (struct sockaddr *)&clientAddr, addr_size);
+      printf("Line %d: %d orders completed, %d iterations\n", i+1, stats[i]->num_completed, stats[i]->iterations);
    }
-   order_size2 = 1;
-   printf("Order size is: %d\n", order_size);
 
-   while(order_size2 > 0)
+   for(i = 0; i < CLIENTS; i++)
    {
-      nBytes = recvfrom(udpSocket, &return_status, 4, 0, (struct sockaddr *) &clientAddr, &clientlen_t);
-      printf("Message recieved: %d\n", return_status);
-      order_size -= orders[return_status]->capacity;
-      printf("IP address of client: %X\n", clientAddr.sin_addr.s_addr);
-      printf("Order size after client did work: %d\n", order_size);
-      order_size2--;
+      free(orders[i]);
+      free(stats[i]);
    }
    close(udpSocket);
-
 }
 
 void shutdown_factory_lines()
