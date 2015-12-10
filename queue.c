@@ -12,7 +12,7 @@
 // Date: December 10, 2015
 //
 //---------------------------------------------------------------
-#include "Code130_Queue.h"
+#include "queue.h"
 
 // Declare these as static so no code outside of this source
 // can access them.
