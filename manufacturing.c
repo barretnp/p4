@@ -10,7 +10,7 @@
 #include "shared.h"
 #include "queue.h"
 
-#define CLIENTS 1
+#define CLIENTS 5
 #define WORKING 1
 #define NO_MORE 0
 
@@ -63,13 +63,17 @@ void dispatch_factory_lines()
 
    int theQueue[5];
 
-   uint32_t order_size, return_status;
+   int order_size, order_size2, return_status;
 
    line_stats *stats[5];
 
    order_struct *orders[5];
 
    status_struct status;
+
+   status.status = -1;
+   status.id = 0;
+   status.work = 0;
 
    struct sockaddr_in serverAddr, client_info;
    struct sockaddr_in *clientAddr[5];
@@ -88,6 +92,11 @@ void dispatch_factory_lines()
       stats[i] = malloc(sizeof(line_stats));
       clientAddr[i] = malloc(sizeof(struct sockaddr_in));
    }
+   for(i = 0; i < CLIENTS; i++)
+   {
+      stats[i]->num_completed = 0;
+      stats[i]->iterations = 0;
+   }
 
    //Seed random number generator
    srandom(time(NULL));
@@ -95,6 +104,7 @@ void dispatch_factory_lines()
  
    //Generate oder size
    order_size = random() % 40001 + 10000;
+   order_size2 = order_size;
 
    //Create capacity, duration, and id numbers for orders
    for(i = 0; i < CLIENTS; i++)
@@ -102,9 +112,6 @@ void dispatch_factory_lines()
       orders[i]->capacity = random() % 591 + 10;
       orders[i]->duration = random() % 4001 + 1000;
       orders[i]->id_num = i + 1; 
-      printf("Capacity: %d\n", orders[i]->capacity);
-      printf("Duration: %d\n", orders[i]->duration);
-      printf("id_num: %d\n", orders[i]->id_num);
    }
 
    InitQueue();
@@ -122,7 +129,7 @@ void dispatch_factory_lines()
    memset((char *)&serverAddr, 0, sizeof(serverAddr));
    serverAddr.sin_family = AF_INET;
    serverAddr.sin_port = htons(7891);
-   serverAddr.sin_addr.s_addr = inet_addr("134.126.141.154");
+   serverAddr.sin_addr.s_addr = inet_addr("134.126.141.81");
 
    //Bind socket to port
    if((bind(udpSocket, (struct sockaddr *) &serverAddr, sizeof(serverAddr))) < 0)
@@ -133,23 +140,28 @@ void dispatch_factory_lines()
 
    curr_status = WORKING;
    i = 0;
-   printf("%d\n", order_size);
    //Receive message from new client and send order info
+   printf("Order Size: %d\n", order_size);
    system("./launch_clients.sh easterpa");
    while(order_size > 0)
-   {  
+   { 
+      order_fin = 0;
       if(!isEmpty())
       {
+         
          line_id = Dequeue() -1;
          line_cap = orders[line_id]->capacity;
          if(line_cap <= order_size)
          {
-            sendto(udpSocket, &line_cap, sizeof(line_cap), 0, (struct sockaddr*)clientAddr[line_id], addr_size);
+            status.work = line_cap;
+            sendto(udpSocket, &status, sizeof(status_struct), 0, (struct sockaddr*)clientAddr[line_id], addr_size);
             order_size -= line_cap;
+            
          }
          else
          {
-            sendto(udpSocket, &order_size, sizeof(order_size), 0, (struct sockaddr*)clientAddr[line_id], addr_size);
+            status.work = order_size;
+            sendto(udpSocket, &status, sizeof(status_struct), 0, (struct sockaddr*)clientAddr[line_id], addr_size);
             order_size = 0;
             order_fin = 2;
          }
@@ -165,9 +177,10 @@ void dispatch_factory_lines()
          }
          else if(status.status == 2)
          {
-            line_id = status.id -1;
+            printf("num completed: %d, id_num: %d, iterations: %d\n", status.work, status.id, stats[line_id]->iterations);
+            line_id = status.id-1;
             stats[line_id]->num_completed += status.work;
-            stats[line_id]->iterations += status.iterations;
+            stats[line_id]->iterations++;
             order_fin = 2;
          }
          else
@@ -177,51 +190,18 @@ void dispatch_factory_lines()
             clientAddr[i]->sin_port = client_info.sin_port;
             clientAddr[i]->sin_addr.s_addr = client_info.sin_addr.s_addr;
             i++;
+            order_fin = 2;
          }
       }
-      /*printf("top of loop\n");
-      recvfrom(udpSocket, &return_status, sizeof(return_status), 0, (struct sockaddr *) &clientAddr, &client_addr_size);
-      printf("Received: message: %d\n", return_status);
-      if(return_status == 6 && curr_status == WORKING)
-      {
-         sendto(udpSocket, orders[i], sizeof(order_struct), 0, (struct sockaddr *)&clientAddr, client_addr_size);
-         i++;
-         printf("Sent message back to client\n");
-      }
-      else if(curr_status == WORKING)
-      {
-        printf("Made into working section\n");
-        if(orders[return_status-1]->capacity <= order_size)
-        {
-           
-           status.status = curr_status;
-           status.work = orders[return_status-1]->capacity; 
-           sendto(udpSocket, &status, sizeof(status_struct), 0, (struct sockaddr *)&clientAddr, client_addr_size);
-           stats[return_status-1]->num_completed += status.work;
-           stats[return_status-1]->iterations++;
-           order_size -= status.work;
-           printf("full order\n");
-        }
-        else
-        {
-           status.status = curr_status;
-           status.work = order_size;
-           sendto(udpSocket, &status, sizeof(status), 0, (struct sockaddr *)&clientAddr, client_addr_size);
-           status.status = NO_MORE;
-           stats[return_status-1]->num_completed += status.work;
-           stats[return_status-1]->iterations++; 
-           order_size -= status.work;
-           printf("partial order\n");
-           recvfrom(udpSocket, &return_status, sizeof(return_status), 0, (struct sockaddr *) &clientAddr, &client_addr_size);
-           sendto(udpSocket, &status, sizeof(status), 0, (struct sockaddr *)&clientAddr, client_addr_size);
-           printf("finished in server\n");
-        } 
-      }*/
    }
 
    //system call to kill all lines
-   system("./killall.sh easterpa");
-
+   curr_status = NO_MORE;
+   for(i = 0; i < CLIENTS; i++)
+   {
+      sendto(udpSocket, &curr_status , sizeof(int), 0, (struct sockaddr*)clientAddr[i], addr_size);
+   }
+   printf("order_size: %d\n", order_size2);
    for(i = 0; i < CLIENTS; i++)
    {
       printf("Line %d: %d orders completed, %d iterations\n", i+1, stats[i]->num_completed, stats[i]->iterations);
@@ -234,6 +214,10 @@ void dispatch_factory_lines()
       free(clientAddr[i]);
    }
    close(udpSocket);
+
+   getchar();
+   getchar();
+   system("./killall.sh easterpa");
 }
 
 void shutdown_factory_lines()
