@@ -12,9 +12,9 @@ static void dispatch_factory_lines();
 static void shutdown_factory_lines();
 static void charge_client();
 typedef struct {
-   uint32_t capacity;
-   uint32_t duration;
-   uint32_t id_num;
+   int capacity;
+   int duration;
+   int id_num;
 } order_struct;
 
 typedef struct {
@@ -26,6 +26,11 @@ typedef struct {
    uint32_t iterations;
    uint32_t num_completed;
 }  line_stats;
+
+typedef struct {
+   int status;
+   uint32_t work;
+} status_struct;
 
 
 #endif
