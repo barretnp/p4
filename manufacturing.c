@@ -8,6 +8,7 @@
 #include "manufacturing.h"
 #include "statemodel.h"
 #include "shared.h"
+#include "queue.h"
 
 #define CLIENTS 1
 #define WORKING 1
@@ -58,9 +59,9 @@ void charge_client()
 
 void dispatch_factory_lines()
 {
-   int counter, i, udpSocket, nBytes, curr_statusi, front, next;
+   int line_id, line_cap, i, udpSocket, nBytes, curr_status, head, tail, order_fin;
 
-   int queue[5];
+   int theQueue[5];
 
    uint32_t order_size, return_status;
 
@@ -70,11 +71,13 @@ void dispatch_factory_lines()
 
    status_struct status;
 
-   struct sockaddr_in serverAddr, clientAddr;
+   struct sockaddr_in serverAddr, client_info;
+   struct sockaddr_in *clientAddr[5];
    
    socklen_t addr_size, client_addr_size;
    
    client_addr_size = sizeof(clientAddr);
+   order_fin = 0;
 
    printf("Factory starting up...\n");
 
@@ -83,6 +86,7 @@ void dispatch_factory_lines()
    {
       orders[i] = malloc(sizeof(order_struct));
       stats[i] = malloc(sizeof(line_stats));
+      clientAddr[i] = malloc(sizeof(struct sockaddr_in));
    }
 
    //Seed random number generator
@@ -102,6 +106,8 @@ void dispatch_factory_lines()
       printf("Duration: %d\n", orders[i]->duration);
       printf("id_num: %d\n", orders[i]->id_num);
    }
+
+   InitQueue();
 
    //Set up Socket
    udpSocket = socket(PF_INET, SOCK_DGRAM, 0);
@@ -125,14 +131,55 @@ void dispatch_factory_lines()
       exit(0);
    }
 
-   counter = CLIENTS;
    curr_status = WORKING;
    i = 0;
    printf("%d\n", order_size);
    //Receive message from new client and send order info
+   system("./launch_clients.sh easterpa");
    while(order_size > 0)
-   {
-      printf("top of loop\n");
+   {  
+      if(!isEmpty())
+      {
+         line_id = Dequeue() -1;
+         line_cap = orders[line_id]->capacity;
+         if(line_cap <= order_size)
+         {
+            sendto(udpSocket, &line_cap, sizeof(line_cap), 0, (struct sockaddr*)clientAddr[line_id], addr_size);
+            order_size -= line_cap;
+         }
+         else
+         {
+            sendto(udpSocket, &order_size, sizeof(order_size), 0, (struct sockaddr*)clientAddr[line_id], addr_size);
+            order_size = 0;
+            order_fin = 2;
+         }
+      }
+
+      while(order_fin != 2)
+      {
+         recvfrom(udpSocket, &status, sizeof(status), 0, (struct sockaddr*)&client_info, &addr_size);
+
+         if(status.status == 1)
+         {
+            Enqueue(status.id);
+         }
+         else if(status.status == 2)
+         {
+            line_id = status.id -1;
+            stats[line_id]->num_completed += status.work;
+            stats[line_id]->iterations += status.iterations;
+            order_fin = 2;
+         }
+         else
+         {
+            sendto(udpSocket, orders[i], sizeof(order_struct), 0, (struct sockaddr*)&client_info, addr_size);
+            clientAddr[i]->sin_family = client_info.sin_family;
+            clientAddr[i]->sin_port = client_info.sin_port;
+            clientAddr[i]->sin_addr.s_addr = client_info.sin_addr.s_addr;
+            i++;
+         }
+      }
+      /*printf("top of loop\n");
       recvfrom(udpSocket, &return_status, sizeof(return_status), 0, (struct sockaddr *) &clientAddr, &client_addr_size);
       printf("Received: message: %d\n", return_status);
       if(return_status == 6 && curr_status == WORKING)
@@ -169,8 +216,11 @@ void dispatch_factory_lines()
            sendto(udpSocket, &status, sizeof(status), 0, (struct sockaddr *)&clientAddr, client_addr_size);
            printf("finished in server\n");
         } 
-      }
+      }*/
    }
+
+   //system call to kill all lines
+   system("./killall.sh easterpa");
 
    for(i = 0; i < CLIENTS; i++)
    {
@@ -181,6 +231,7 @@ void dispatch_factory_lines()
    {
       free(orders[i]);
       free(stats[i]);
+      free(clientAddr[i]);
    }
    close(udpSocket);
 }

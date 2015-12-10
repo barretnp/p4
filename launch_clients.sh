@@ -1,9 +1,9 @@
 #!/bin/bash
 #SERV_IP=0x867E8DDE
 
-HOSTS="l25008 l25009 l25010 l25011 l25012"
+HOSTS="l25008"
 USERNAME=$1
-SCRIPT="cd ~/FA15/CS361/phase4; ./test"
+SCRIPT="cd ~/FA15/CS361/phase4; ./client"
 
 if [ -n "$USERNAME" ]
 then

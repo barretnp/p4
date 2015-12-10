@@ -59,7 +59,7 @@ int Enqueue(int id)
 	// Increment tail index
 	tail++;
 	// Add the item to the Queue
-	theQueue[tail % MAX_SIZE] = ch;
+	theQueue[tail % MAX_SIZE] = id;
 	return TRUE;
 }
 

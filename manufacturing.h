@@ -30,6 +30,8 @@ typedef struct {
 typedef struct {
    int status;
    uint32_t work;
+   int iterations;
+   int id;
 } status_struct;
 
 

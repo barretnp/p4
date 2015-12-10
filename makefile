@@ -1,7 +1,7 @@
 all: driver client
 
-driver: driver.o statemodel.o state.o accepting.o processing.o manufacturing.o shipping.o
-	gcc -pthread driver.o statemodel.o state.o accepting.o processing.o manufacturing.o shipping.o -o driver
+driver: driver.o statemodel.o state.o accepting.o processing.o manufacturing.o shipping.o queue.o
+	gcc -pthread driver.o statemodel.o state.o accepting.o processing.o manufacturing.o shipping.o queue.o -o driver
 driver.o: driver.c statemodel.h
 	gcc -pthread -g -c driver.c
 
@@ -16,8 +16,10 @@ accepting.o: state.h accepting.h accepting.c
 
 processing.o: state.h processing.h processing.c
 	gcc -pthread -g -c processing.c
+queue.o: queue.h queue.c
+	gcc -g -c queue.c
 
-manufacturing.o: state.h manufacturing.h manufacturing.c
+manufacturing.o: state.h manufacturing.h manufacturing.c queue.h
 	gcc -pthread -g -c manufacturing.c
 
 opening.o: state.h shipping.h shipping.c
@@ -27,7 +29,6 @@ client: client.o
 
 client.o: client.c
 	gcc -g -c client.c
-
 
 clean:
 	rm *.o ; rm driver ; rm client
